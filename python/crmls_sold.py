@@ -1,13 +1,23 @@
-
+import os
 import csv
 import requests
-from datetime import datetime
+from dotenv import load_dotenv
 
-# Define the API endpoint
-url = 'https://api-trestle.corelogic.com/trestle/odata/Property'
+load_dotenv()
 
-# Get token from IDX Exchange secure proxy instead of exposing CoreLogic credentials
-auth_endpoint = 'https://idxexchange.com/internal-api/trestle_token.php?key=IDXEXCHANGE2026_CHANGE_THIS'
+url = os.getenv("TRESTLE_PROPERTY_URL")
+auth_base_url = os.getenv("TRESTLE_AUTH_ENDPOINT")
+proxy_key = os.getenv("IDX_PROXY_KEY")
+
+if not url or not auth_base_url:
+    raise ValueError("Missing TRESTLE_PROPERTY_URL or TRESTLE_AUTH_ENDPOINT in .env")
+
+if not proxy_key:
+    raise ValueError(
+        "Missing IDX_PROXY_KEY. Ask IDX Exchange for the secure proxy key."
+    )
+
+auth_endpoint = f"{auth_base_url}?key={proxy_key}"
 
 response = requests.get(auth_endpoint)
 response.raise_for_status()

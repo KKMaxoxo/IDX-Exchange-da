@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-DATA_DIR = Path("Desktop/IDX-da/idx_data")
+DATA_DIR = Path("/Users/kmaxx/Desktop/IDX-da/idx_data")
 
 START_MONTH = "202401"
 END_MONTH = "202605"
