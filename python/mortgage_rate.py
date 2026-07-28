@@ -36,5 +36,5 @@ print(
 )
 
 # Export 
-sold_with_rates.to_csv(DATA_DIR/"sold_with_rates.csv")
-listings_with_rates.to_csv(DATA_DIR/"listing_with_rates.csv")
+sold_with_rates.to_csv(DATA_DIR/"sold_with_rates.csv",index=False)
+listings_with_rates.to_csv(DATA_DIR/"listing_with_rates.csv", index = False)
