@@ -6,7 +6,7 @@ url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US"
 mortgage = pd.read_csv(url, parse_dates=['observation_date'])
 mortgage.columns = ['date', 'rate_30yr_fixed']
 
-DATA_DIR = Path("/Users/kmaxx/Desktop/IDX-da/idx_data")
+DATA_DIR = Path("/Users/kmaxx/Desktop/IDX-da/idx_final_data")
 sold = pd.read_csv(DATA_DIR / "sold_clean.csv", low_memory= False)
 listings = pd.read_csv(DATA_DIR / "listing_clean.csv", low_memory= False)
 

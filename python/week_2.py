@@ -1,189 +1,271 @@
 """
-Week 2 EDA
-
-For the combined sold and listing datasets, this script:
-1. Documents all unique PropertyType values.
-2. Filters to PropertyType == "Residential".
-3. Produces null-count and missing-percentage summaries.
-4. Flags columns with more than 90% missing values.
-5. Summarizes ClosePrice, LivingArea, and DaysOnMarket using
-   min, max, mean, median, and selected percentiles.
-6. Saves each filtered Residential dataset and its EDA reports as CSV files.
+Week 2: Review property types, filter to Residential properties, identify
+high-missing columns, summarize numeric fields, and save cleaned datasets.
 """
 
 from pathlib import Path
+
 import pandas as pd
 
 
-# Update this path if your files are stored somewhere else.
-DATA_DIR = Path("/Users/kmaxx/Desktop/IDX-da/idx_data")
+DATA_DIR = Path("/Users/kmaxx/Desktop/IDX-da/idx_final_data")
 
-INPUT_FILES = {
-    "sold": DATA_DIR / "combined_sold.csv",
-    "listing": DATA_DIR / "combined_listing.csv",
-}
+sold_df = pd.read_csv(
+    DATA_DIR / "sold_residential_filter.csv",
+    low_memory=False
+)
 
-NUMERIC_COLUMNS = [
+listing_df = pd.read_csv(
+    DATA_DIR / "listing_residential_filter.csv",
+    low_memory=False
+)
+
+
+# --------------------------------------------------
+# UNIQUE PROPERTY TYPES
+# --------------------------------------------------
+
+sold_property_types = (
+    sold_df["PropertyType"]
+    .value_counts(dropna=False)
+    .rename_axis("PropertyType")
+    .reset_index(name="Count")
+)
+
+listing_property_types = (
+    listing_df["PropertyType"]
+    .value_counts(dropna=False)
+    .rename_axis("PropertyType")
+    .reset_index(name="Count")
+)
+
+print("\n" + "-" * 60)
+print("SOLD PROPERTY TYPES")
+print("-" * 60)
+print(sold_property_types.to_string(index=False))
+
+print("\n" + "-" * 60)
+print("LISTING PROPERTY TYPES")
+print("-" * 60)
+print(listing_property_types.to_string(index=False))
+
+
+# --------------------------------------------------
+# FILTERING LOGIC
+# --------------------------------------------------
+
+print("\n" + "-" * 60)
+print("FILTERING LOGIC")
+print("-" * 60)
+print("1. Keep rows where PropertyType == 'Residential'.")
+print("2. Flag columns with more than 90% null values.")
+print("3. Remove columns with more than 90% null values.")
+
+sold_filtered = sold_df.loc[
+    sold_df["PropertyType"].eq("Residential")
+].copy()
+
+listing_filtered = listing_df.loc[
+    listing_df["PropertyType"].eq("Residential")
+].copy()
+
+
+# --------------------------------------------------
+# NULL-COUNT AND MISSING-VALUE REPORTS
+# --------------------------------------------------
+
+sold_missing_report = pd.DataFrame({
+    "Column": sold_filtered.columns,
+    "NullCount": sold_filtered.isna().sum().values,
+    "NullPercent": (sold_filtered.isna().mean().values * 100).round(2)
+})
+
+sold_missing_report["Above90PercentNull"] = (
+    sold_missing_report["NullPercent"] > 90
+)
+
+sold_missing_report = sold_missing_report.sort_values(
+    "NullPercent",
+    ascending=False
+).reset_index(drop=True)
+
+
+listing_missing_report = pd.DataFrame({
+    "Column": listing_filtered.columns,
+    "NullCount": listing_filtered.isna().sum().values,
+    "NullPercent": (listing_filtered.isna().mean().values * 100).round(2)
+})
+
+listing_missing_report["Above90PercentNull"] = (
+    listing_missing_report["NullPercent"] > 90
+)
+
+listing_missing_report = listing_missing_report.sort_values(
+    "NullPercent",
+    ascending=False
+).reset_index(drop=True)
+
+
+print("\n" + "-" * 90)
+print("SOLD NULL-COUNT SUMMARY")
+print("-" * 90)
+print(sold_missing_report.to_string(index=False))
+
+print("\n" + "-" * 90)
+print("LISTING NULL-COUNT SUMMARY")
+print("-" * 90)
+print(listing_missing_report.to_string(index=False))
+
+
+print("\n" + "-" * 90)
+print("SOLD COLUMNS ABOVE 90% NULL")
+print("-" * 90)
+print(
+    sold_missing_report.loc[
+        sold_missing_report["Above90PercentNull"]
+    ].to_string(index=False)
+)
+
+print("\n" + "-" * 90)
+print("LISTING COLUMNS ABOVE 90% NULL")
+print("-" * 90)
+print(
+    listing_missing_report.loc[
+        listing_missing_report["Above90PercentNull"]
+    ].to_string(index=False)
+)
+
+
+sold_columns_to_drop = sold_missing_report.loc[
+    sold_missing_report["Above90PercentNull"],
+    "Column"
+].tolist()
+
+listing_columns_to_drop = listing_missing_report.loc[
+    listing_missing_report["Above90PercentNull"],
+    "Column"
+].tolist()
+
+sold_clean = sold_filtered.drop(
+    columns=sold_columns_to_drop
+)
+
+listing_clean = listing_filtered.drop(
+    columns=listing_columns_to_drop
+)
+
+
+# --------------------------------------------------
+# NUMERIC DISTRIBUTION SUMMARY
+# --------------------------------------------------
+
+numeric_columns = [
     "ClosePrice",
     "LivingArea",
-    "DaysOnMarket",
+    "DaysOnMarket"
 ]
 
+sold_numeric = sold_clean[
+    [column for column in numeric_columns if column in sold_clean.columns]
+].apply(pd.to_numeric, errors="coerce")
 
-def create_null_summary(df):
-    """Return missing counts and percentages for every column."""
-    summary = pd.DataFrame({
-        "Column": df.columns,
-        "NullCount": df.isna().sum().values,
-        "NullPercentage": (df.isna().mean().values * 100).round(2),
-    })
+listing_numeric = listing_clean[
+    [column for column in numeric_columns if column in listing_clean.columns]
+].apply(pd.to_numeric, errors="coerce")
 
-    return summary.sort_values(
-        ["NullPercentage", "NullCount"],
-        ascending=[False, False],
-    ).reset_index(drop=True)
-
-
-def create_numeric_summary(df):
-    """Return min, max, mean, median, and percentiles for required variables."""
-    available_columns = [
-        column
-        for column in NUMERIC_COLUMNS
-        if column in df.columns
-    ]
-
-    numeric_data = df[available_columns].apply(
-        pd.to_numeric,
-        errors="coerce",
-    )
-
-    summary = numeric_data.agg([
-        "count",
-        "min",
-        "max",
-        "mean",
-        "median",
-    ]).T
-
-    percentiles = numeric_data.quantile([
+sold_numeric_summary = sold_numeric.describe(
+    percentiles=[
+        0.01,
+        0.05,
         0.25,
         0.50,
         0.75,
-        0.90,
         0.95,
-        0.99,
-    ]).T
-
-    percentiles.columns = [
-        "25thPercentile",
-        "50thPercentile",
-        "75thPercentile",
-        "90thPercentile",
-        "95thPercentile",
-        "99thPercentile",
+        0.99
     ]
+).T
 
-    summary["MissingCount"] = numeric_data.isna().sum()
-    summary = summary.join(percentiles)
-
-    column_order = [
-        "count",
-        "MissingCount",
+sold_numeric_summary = sold_numeric_summary[
+    [
         "min",
-        "25thPercentile",
-        "50thPercentile",
-        "median",
-        "75thPercentile",
-        "90thPercentile",
-        "95thPercentile",
-        "99thPercentile",
         "max",
         "mean",
+        "50%",
+        "1%",
+        "5%",
+        "25%",
+        "75%",
+        "95%",
+        "99%"
     ]
-
-    return summary[column_order].round(2).reset_index(names="Variable")
-
-
-def process_dataset(dataset_name, input_path):
-    """Load, document, filter, summarize, and save one dataset."""
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    df = pd.read_csv(input_path, low_memory=False)
-
-    if "PropertyType" not in df.columns:
-        raise KeyError(
-            f"'PropertyType' was not found in {input_path.name}."
-        )
-
-    print(f"\n{'=' * 70}")
-    print(f"{dataset_name.upper()} DATASET")
-    print(f"{'=' * 70}")
-    print(f"Input file: {input_path}")
-    print(f"Rows before filtering: {len(df):,}")
-
-    # Document all unique property types before applying the filter.
-    unique_property_types = (
-        df["PropertyType"]
-        .astype("string")
-        .dropna()
-        .sort_values()
-        .unique()
-    )
-
-    print("\nUnique PropertyType values found:")
-    for property_type in unique_property_types:
-        print(f"- {property_type}")
-
-    # Filtering logic: retain only rows whose PropertyType is exactly Residential.
-    residential_df = df.loc[
-        df["PropertyType"].eq("Residential")
-    ].copy()
-
-    print("\nFiltering logic applied:")
-    print('df["PropertyType"] == "Residential"')
-    print(f"Rows after filtering: {len(residential_df):,}")
-    print(f"Rows removed: {len(df) - len(residential_df):,}")
-
-    null_summary = create_null_summary(residential_df)
-    over_90_null = null_summary.loc[
-        null_summary["NullPercentage"] > 90
-    ].copy()
-    numeric_summary = create_numeric_summary(residential_df)
-
-    print("\nNull-count summary:")
-    print(null_summary.to_string(index=False))
-
-    print("\nColumns above 90% null:")
-    if over_90_null.empty:
-        print("None")
-    else:
-        print(over_90_null.to_string(index=False))
-
-    print("\nNumeric distribution summary:")
-    print(numeric_summary.to_string(index=False))
-
-    filtered_output = DATA_DIR / f"{dataset_name}_residential_filtered.csv"
-    null_output = DATA_DIR / f"{dataset_name}_null_summary.csv"
-    over_90_output = DATA_DIR / f"{dataset_name}_over_90_percent_null.csv"
-    numeric_output = DATA_DIR / f"{dataset_name}_numeric_summary.csv"
-
-    residential_df.to_csv(filtered_output, index=False)
-    null_summary.to_csv(null_output, index=False)
-    over_90_null.to_csv(over_90_output, index=False)
-    numeric_summary.to_csv(numeric_output, index=False)
-
-    print("\nSaved files:")
-    print(filtered_output)
-    print(null_output)
-    print(over_90_output)
-    print(numeric_output)
+].rename(columns={
+    "min": "Min",
+    "max": "Max",
+    "mean": "Mean",
+    "50%": "Median"
+}).round(2)
 
 
-def main():
-    for dataset_name, input_path in INPUT_FILES.items():
-        process_dataset(dataset_name, input_path)
+listing_numeric_summary = listing_numeric.describe(
+    percentiles=[
+        0.01,
+        0.05,
+        0.25,
+        0.50,
+        0.75,
+        0.95,
+        0.99
+    ]
+).T
+
+listing_numeric_summary = listing_numeric_summary[
+    [
+        "min",
+        "max",
+        "mean",
+        "50%",
+        "1%",
+        "5%",
+        "25%",
+        "75%",
+        "95%",
+        "99%"
+    ]
+].rename(columns={
+    "min": "Min",
+    "max": "Max",
+    "mean": "Mean",
+    "50%": "Median"
+}).round(2)
 
 
-if __name__ == "__main__":
-    main()
+print("\n" + "-" * 110)
+print("SOLD NUMERIC DISTRIBUTION SUMMARY")
+print("-" * 110)
+print(sold_numeric_summary.to_string())
+
+print("\n" + "-" * 110)
+print("LISTING NUMERIC DISTRIBUTION SUMMARY")
+print("-" * 110)
+print(listing_numeric_summary.to_string())
+
+
+# --------------------------------------------------
+# SAVE FILTERED DATASETS
+# --------------------------------------------------
+
+sold_clean.to_csv(
+    DATA_DIR / "sold_clean.csv",
+    index=False
+)
+
+listing_clean.to_csv(
+    DATA_DIR / "listing_clean.csv",
+    index=False
+)
+
+print("\n" + "-" * 60)
+print("SAVED FILES")
+print("-" * 60)
+print(DATA_DIR / "sold_clean.csv")
+print(DATA_DIR / "listing_clean.csv")

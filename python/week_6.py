@@ -1,38 +1,28 @@
-#!/usr/bin/env python3
 """
-Week 6: Feature Engineering and Segmented Market Summary
-
-Creates the following engineered metrics for sold residential listings:
-- PriceRatio = ClosePrice / ListPrice
-- CloseToOriginalListRatio = ClosePrice / OriginalListPrice
-- PPSF = ClosePrice / LivingArea
-- DaysOnMarket (standardized as numeric)
-- YrMo = year-month extracted from CloseDate
-- ListingToContractDays = PurchaseContractDate - ListingContractDate
-- ContractToCloseDays = CloseDate - PurchaseContractDate
-
-Outputs:
-- featured_sold.csv
-- week_6_sample_output.csv
-- week_6_segment_summary.csv
+Week 6: Create the required engineered metrics, display a sample output table,
+create a segmented county summary, and save the featured datasets.
 """
 
-from __future__ import annotations
-
-import argparse
 from pathlib import Path
-
-import numpy as np
+from datetime import datetime
+import re
 import pandas as pd
+import geopandas as gpd
 
+import os
 
-DATE_COLUMNS = [
+DATA_DIR = Path("/Users/kmaxx/Desktop/IDX-da/idx_final_data")
+
+sold_df = pd.read_csv(DATA_DIR / "cleaned_sold.csv", low_memory= False)
+listing_df = pd.read_csv(DATA_DIR / "cleaned_listing.csv", low_memory= False)
+
+date_columns = [
     "CloseDate",
     "PurchaseContractDate",
     "ListingContractDate"
 ]
 
-NUMERIC_COLUMNS = [
+numeric_columns = [
     "ClosePrice",
     "ListPrice",
     "OriginalListPrice",
@@ -40,190 +30,218 @@ NUMERIC_COLUMNS = [
     "DaysOnMarket"
 ]
 
-ENGINEERED_COLUMNS = [
+for df in [sold_df, listing_df]:
+    existing_dates = [col for col in date_columns if col in df.columns]
+    existing_numeric = [col for col in numeric_columns if col in df.columns]
+
+    df[existing_dates] = df[existing_dates].apply(pd.to_datetime, errors="coerce")
+    df[existing_numeric] = df[existing_numeric].apply(pd.to_numeric, errors="coerce")
+
+    # Close price compared with original list price
+sold_df["PriceRatio"] = sold_df["ClosePrice"] / sold_df["OriginalListPrice"]
+
+# Price per square foot
+sold_df["PricePerSqFt"] = sold_df["ClosePrice"] / sold_df["LivingArea"]
+
+# Date-based variables
+sold_df["Year"] = sold_df["CloseDate"].dt.year
+sold_df["Month"] = sold_df["CloseDate"].dt.month
+sold_df["YrMo"] = sold_df["CloseDate"].dt.to_period("M")
+
+# Days from listing to accepted contract
+sold_df["ListingToContractDays"] = (sold_df["PurchaseContractDate"] - sold_df["ListingContractDate"]).dt.days
+
+# Days from accepted contract to closing
+sold_df["ContractToCloseDays"] = (sold_df["CloseDate"] - sold_df["PurchaseContractDate"]).dt.days
+
+metric_columns = [
     "PriceRatio",
-    "CloseToOriginalListRatio",
-    "PPSF",
-    "DaysOnMarket",
-    "YrMo",
+    "PricePerSqFt",
     "ListingToContractDays",
     "ContractToCloseDays"
 ]
 
-
-def safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-    """Divide only when both values are present and the denominator is positive."""
-    result = numerator.div(denominator)
-    return result.where(numerator.notna() & denominator.gt(0)).replace([np.inf, -np.inf], np.nan)
+missing_summary = sold_df[metric_columns].isna().sum().to_frame("missing_count")
+missing_summary["missing_pct"] = (missing_summary["missing_count"] / len(sold_df) * 100).round(2)
 
 
-def engineer_metrics(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert source columns and create all required Week 6 metrics."""
+
+districts = gpd.read_file(
+    DATA_DIR / "DistrictAreas2526.geojson"
+)
+
+print(districts.shape)
+print(districts.crs)
+print(districts.columns.tolist())
+
+district_type_summary = districts["DistrictType"].value_counts(dropna=False).rename_axis("DistrictType").reset_index(name="Count")
+
+district_type_summary["Percentage"] = (district_type_summary["Count"] / district_type_summary["Count"].sum() * 100).round(2)
+
+
+unified_districts = districts.loc[districts["DistrictType"].astype("string").str.strip().str.casefold().eq("unified")].copy()
+unified_districts = unified_districts[["DistrictName", "geometry"]].copy()
+
+print("Unified districts:", len(unified_districts))
+unified_districts.head()
+
+coordinate_columns = [
+    "Latitude",
+    "Longitude"
+]
+
+sold_df[coordinate_columns] = sold_df[coordinate_columns].apply(pd.to_numeric, errors="coerce")
+
+valid_coordinates = sold_df[coordinate_columns].notna().all(axis=1)
+
+sold_points = gpd.GeoDataFrame(
+    sold_df.loc[valid_coordinates].copy(),
+    geometry=gpd.points_from_xy(
+        sold_df.loc[valid_coordinates, "Longitude"],
+        sold_df.loc[valid_coordinates, "Latitude"]
+    ),
+    crs="EPSG:4326"
+)
+
+sold_points[coordinate_columns + ["geometry"]].head()
+
+join_columns = [
+    "DistrictName",
+    "geometry"
+]
+
+preview_columns = [
+    "Latitude",
+    "Longitude",
+    "DistrictName"
+]
+
+# Match the coordinate reference systems
+sold_points = sold_points.to_crs(unified_districts.crs)
+
+# Match each property point to its unified school district
+sold_joined = gpd.sjoin(sold_points,unified_districts[join_columns],how="left",predicate="within")
+
+sold_joined[preview_columns].head()
+
+# Create one district result for each original row
+district_lookup = sold_joined.groupby(level=0)["DistrictName"].first()
+
+# Add the district name to the original sold dataset
+sold_df["DistrictName"] = sold_df.index.map(district_lookup)
+
+preview_columns = [
+    "UnparsedAddress",
+    "City",
+    "Latitude",
+    "Longitude",
+    "DistrictName"
+]
+
+sold_df[preview_columns].head(10)
+
+print(
+    "Properties without a unified district:",
+    sold_df["DistrictName"].isna().sum()
+)
+
+print(
+    "Missing percentage:",
+    round(sold_df["DistrictName"].isna().mean() * 100, 2),
+    "%"
+)
+
+coordinate_columns = [
+    "Latitude",
+    "Longitude"
+]
+
+listing_df[coordinate_columns] = listing_df[coordinate_columns].apply(pd.to_numeric, errors="coerce")
+
+valid_coordinates = listing_df[coordinate_columns].notna().all(axis=1)
+
+listing_points = gpd.GeoDataFrame(
+    listing_df.loc[valid_coordinates].copy(),
+    geometry=gpd.points_from_xy(
+        listing_df.loc[valid_coordinates, "Longitude"],
+        listing_df.loc[valid_coordinates, "Latitude"]
+    ),
+    crs="EPSG:4326"
+)
+
+listing_points = listing_points.to_crs(unified_districts.crs)
+
+listing_joined = gpd.sjoin(
+    listing_points,
+    unified_districts[
+        [
+            "DistrictName",
+            "geometry"
+        ]
+    ],
+    how="left",
+    predicate="within"
+)
+
+district_lookup = listing_joined.groupby(level=0)["DistrictName"].first()
+listing_df["DistrictName"] = listing_df.index.map(district_lookup)
+
+preview_columns = [
+    "UnparsedAddress",
+    "City",
+    "Latitude",
+    "Longitude",
+    "DistrictName"
+]
+
+
+print("Matched:", listing_df["DistrictName"].notna().sum())
+print("No district match:", listing_df["DistrictName"].isna().sum())
+
+sold_df.to_csv(DATA_DIR / "featured_sold.csv", index = False)
+listing_df.to_csv(DATA_DIR / "featured_listing.csv", index = False)
+
+
+def create_segment_summary(df, group_columns):
+    required_metrics = [
+        "ClosePrice",
+        "PriceRatio",
+        "PricePerSqFt",
+        "DaysOnMarket",
+        "ListingToContractDays",
+        "ContractToCloseDays"
+    ]
+
     data = df.copy()
 
-    required_columns = [
-        "ClosePrice",
-        "ListPrice",
-        "OriginalListPrice",
-        "LivingArea",
-        "DaysOnMarket",
-        "CloseDate",
-        "PurchaseContractDate",
-        "ListingContractDate"
+    for col in required_metrics:
+        data[col] = pd.to_numeric(data[col], errors="coerce")
+
+    count_column = "ListingKey" if "ListingKey" in data.columns else "ClosePrice"
+
+    summary = data.groupby(
+        group_columns,
+        dropna=False,
+        observed=True
+    ).agg(
+        ListingCount=(count_column, "nunique"),
+        AverageClosePrice=("ClosePrice", "mean"),
+        AveragePriceRatio=("PriceRatio", "mean"),
+        AveragePricePerSqFt=("PricePerSqFt", "mean"),
+        AverageDaysOnMarket=("DaysOnMarket", "mean"),
+        AverageListingToContractDays=("ListingToContractDays", "mean"),
+        AverageContractToCloseDays=("ContractToCloseDays", "mean")
+    ).reset_index()
+
+    mean_columns = [
+        col for col in summary.select_dtypes("number").columns
+        if col != "ListingCount"
     ]
 
-    missing_columns = [column for column in required_columns if column not in data.columns]
-    if missing_columns:
-        raise KeyError(f"Missing required columns: {missing_columns}")
+    summary[mean_columns] = summary[mean_columns].round(2)
 
-    data[DATE_COLUMNS] = data[DATE_COLUMNS].apply(pd.to_datetime, errors="coerce")
-    data[NUMERIC_COLUMNS] = data[NUMERIC_COLUMNS].apply(pd.to_numeric, errors="coerce")
+    return summary.sort_values(["ListingCount", "AverageClosePrice"], ascending=[False, False]).reset_index(drop=True)
 
-    data["PriceRatio"] = safe_divide(data["ClosePrice"], data["ListPrice"])
-    data["CloseToOriginalListRatio"] = safe_divide(data["ClosePrice"], data["OriginalListPrice"])
-    data["PPSF"] = safe_divide(data["ClosePrice"], data["LivingArea"])
-    data["YrMo"] = data["CloseDate"].dt.to_period("M").astype("string")
-    data["ListingToContractDays"] = (data["PurchaseContractDate"] - data["ListingContractDate"]).dt.days
-    data["ContractToCloseDays"] = (data["CloseDate"] - data["PurchaseContractDate"]).dt.days
-
-    # Negative durations indicate inconsistent source dates, so they are not used as valid metrics.
-    data["ListingToContractDays"] = data["ListingToContractDays"].where(data["ListingToContractDays"] >= 0)
-    data["ContractToCloseDays"] = data["ContractToCloseDays"].where(data["ContractToCloseDays"] >= 0)
-
-    return data
+print(create_segment_summary(sold_df,["CountyOrParish","PropertySubType"]))
 
 
-def create_sample_output(data: pd.DataFrame, sample_size: int = 10) -> pd.DataFrame:
-    """Return rows that demonstrate the engineered columns with populated values."""
-    identifier_columns = [
-        column for column in [
-            "ListingKey",
-            "PropertyType",
-            "CountyOrParish",
-            "ClosePrice",
-            "ListPrice",
-            "OriginalListPrice",
-            "LivingArea",
-            "CloseDate",
-            "ListingContractDate",
-            "PurchaseContractDate"
-        ]
-        if column in data.columns
-    ]
-
-    complete_sample = data.dropna(subset=ENGINEERED_COLUMNS).head(sample_size)
-
-    if len(complete_sample) < sample_size:
-        ranked_index = data[ENGINEERED_COLUMNS].notna().sum(axis=1).sort_values(ascending=False).index
-        complete_sample = data.loc[ranked_index].head(sample_size)
-
-    sample = complete_sample[identifier_columns + ENGINEERED_COLUMNS].copy()
-
-    round_columns = [
-        "PriceRatio",
-        "CloseToOriginalListRatio",
-        "PPSF"
-    ]
-    sample[round_columns] = sample[round_columns].round(3)
-
-    return sample
-
-
-def create_segment_summary(data: pd.DataFrame, group_column: str) -> pd.DataFrame:
-    """Create a market summary grouped by CountyOrParish or PropertyType."""
-    if group_column not in data.columns:
-        raise KeyError(f"Grouping column '{group_column}' is not present in the dataset.")
-
-    if "ListingKey" in data.columns:
-        grouped = data.groupby(group_column, dropna=False, observed=True)
-        summary = grouped.agg(
-            ListingCount=("ListingKey", "nunique"),
-            AverageClosePrice=("ClosePrice", "mean"),
-            AveragePriceRatio=("PriceRatio", "mean"),
-            AverageCloseToOriginalListRatio=("CloseToOriginalListRatio", "mean"),
-            AveragePPSF=("PPSF", "mean"),
-            AverageDaysOnMarket=("DaysOnMarket", "mean"),
-            AverageListingToContractDays=("ListingToContractDays", "mean"),
-            AverageContractToCloseDays=("ContractToCloseDays", "mean")
-        ).reset_index()
-    else:
-        grouped = data.groupby(group_column, dropna=False, observed=True)
-        summary = grouped.agg(
-            ListingCount=("ClosePrice", "size"),
-            AverageClosePrice=("ClosePrice", "mean"),
-            AveragePriceRatio=("PriceRatio", "mean"),
-            AverageCloseToOriginalListRatio=("CloseToOriginalListRatio", "mean"),
-            AveragePPSF=("PPSF", "mean"),
-            AverageDaysOnMarket=("DaysOnMarket", "mean"),
-            AverageListingToContractDays=("ListingToContractDays", "mean"),
-            AverageContractToCloseDays=("ContractToCloseDays", "mean")
-        ).reset_index()
-
-    average_columns = [
-        column for column in summary.select_dtypes(include="number").columns
-        if column != "ListingCount"
-    ]
-
-    summary[average_columns] = summary[average_columns].round(2)
-    return summary.sort_values("ListingCount", ascending=False).reset_index(drop=True)
-
-
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Engineer Week 6 sold-listing metrics and summaries.")
-    parser.add_argument(
-        "--data-dir",
-        type=Path,
-        default=Path("/Users/kmaxx/Desktop/IDX-da/idx_data"),
-        help="Directory containing the input CSV and receiving output CSV files."
-    )
-    parser.add_argument(
-        "--input-file",
-        default="cleaned_sold.csv",
-        help="Name of the cleaned sold CSV inside --data-dir."
-    )
-    parser.add_argument(
-        "--group-by",
-        choices=[
-            "CountyOrParish",
-            "PropertyType"
-        ],
-        default="CountyOrParish",
-        help="Column used for the segmented summary."
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_arguments()
-    input_path = args.data_dir / args.input_file
-
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    sold_df = pd.read_csv(input_path, low_memory=False)
-    featured_sold = engineer_metrics(sold_df)
-    sample_output = create_sample_output(featured_sold)
-    segment_summary = create_segment_summary(featured_sold, args.group_by)
-
-    featured_path = args.data_dir / "featured_sold.csv"
-    sample_path = args.data_dir / "week_6_sample_output.csv"
-    summary_path = args.data_dir / "week_6_segment_summary.csv"
-
-    featured_sold.to_csv(featured_path, index=False)
-    sample_output.to_csv(sample_path, index=False)
-    segment_summary.to_csv(summary_path, index=False)
-
-    print("\nSAMPLE OUTPUT — ENGINEERED METRICS")
-    print(sample_output.to_string(index=False))
-
-    print(f"\nSEGMENTED SUMMARY BY {args.group_by}")
-    print(segment_summary.head(15).to_string(index=False))
-
-    print("\nFiles saved:")
-    print(featured_path)
-    print(sample_path)
-    print(summary_path)
-
-
-if __name__ == "__main__":
-    main()
