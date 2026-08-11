@@ -170,61 +170,38 @@ The listing dataset is primarily used to measure **new listing activity**, while
 
 # Repository Structure
 
-A recommended repository structure is:
-
 ```text
-california-real-estate-analytics/
+IDX-Exchange-da/
 │
 ├── README.md
-│
-├── requirements.txt
-│
 ├── .gitignore
-│
-├── LICENSE
-│
-├── data/
-│   │
-│   ├── raw/
-│   │   ├── sold/
-│   │   └── listings/
-│   │
-│   ├── interim/
-│   │   ├── combined_sold.csv
-│   │   └── combined_listing.csv
-│   │
-│   └── processed/
-│       ├── sold_cleaned.csv
-│       ├── listing_cleaned.csv
-│       ├── sold_final_outliers_removed.csv
-│       └── listing_final_outliers_removed.csv
+├── .env
+├── check.ipynb
+├── run_pipeline.py
 │
 ├── notebooks/
-│   │
 │   ├── 01_data_import.ipynb
 │   ├── 02_data_validation.ipynb
 │   ├── 03_data_validation_EDA.ipynb
 │   ├── 04_data_cleaning.ipynb
 │   ├── 05_feature_engineering.ipynb
-│   ├── 06_outlier_detection_removal.ipynb
+│   └── 06_outlier_detection_removal.ipynb
 │
-├── src/
+└── src/
+│   ├── data_processing/
+│   │   ├── data_import.py
+│   │   ├── data_cleaning.py
+│   │   ├── data_validation.py
+│   │   ├── feature_engineering.py
+│   │   ├── mortgage_rate.py
+│   │   └── outliers_detection.py
 │   │
-│   ├── __init__.py
-│   ├── data_cleaning.py
-│   ├── validation.py
-│   ├── feature_engineering.py
-│   ├── outliers.py
-│   └── utils.py
+│   └── data_retrieval/
+│   │   ├── crmls_listed.py
+│   │   └── crmls_sold.py
+│   │
+│   └── run_pipeline.py
 │
-├── tableau/
-│   ├── california_real_estate_dashboard.twbx
-│   └── screenshots/
-│
-├── reports/
-│   ├── figures/
-│   └── findings/
-│
-└── docs/
-    ├── data_dictionary.md
-    └── methodology.md
+└── tableau /
+    ├── market_analysis.twbx
+    
