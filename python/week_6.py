@@ -138,7 +138,6 @@ preview_columns = [
     "DistrictName"
 ]
 
-sold_df[preview_columns].head(10)
 
 print(
     "Properties without a unified district:",

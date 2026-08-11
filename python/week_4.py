@@ -174,6 +174,24 @@ def add_date_consistency_flags(df):
 sold_df = add_date_consistency_flags(sold_df)
 listing_df = add_date_consistency_flags(listing_df)
 
+def remove_inconsistent_date_rows(df):
+    flag_columns = [
+        "listing_after_close_flag",
+        "purchase_after_close_flag",
+        "negative_timeline_flag"
+    ]
+
+    invalid_mask = df[flag_columns].any(axis=1)
+
+    data = df.loc[~invalid_mask].copy()
+
+    data.reset_index(drop=True, inplace=True)
+
+    return data
+
+sold_df = remove_inconsistent_date_rows(sold_df)
+listing_df = remove_inconsistent_date_rows(listing_df)
+
 def add_geographic_flags(df):
     data = df.copy()
 
@@ -205,8 +223,27 @@ def add_geographic_flags(df):
 
     return data
 
-sold_df = add_date_consistency_flags(sold_df)
-listing_df = add_date_consistency_flags(listing_df)
+sold_df = add_geographic_flags(sold_df)
+listing_df = add_geographic_flags(listing_df)
+
+def remove_invalid_geographic_rows(df):
+    data = df.copy()
+
+    invalid_mask = (
+        data["missing_coordinates_flag"] |
+        data["zero_coordinates_flag"] |
+        data["positive_longitude_flag"] |
+        data["implausible_coordinates_flag"]
+    )
+
+    data = data.loc[~invalid_mask].copy()
+
+    data.reset_index(drop=True, inplace=True)
+
+    return data
+
+sold_df = remove_invalid_geographic_rows(sold_df)
+listing_df = remove_invalid_geographic_rows(listing_df)
 
 sold_postal_city = sold_df[["PostalCode", "City"]]
 
@@ -320,10 +357,10 @@ sold_secondary_variables = [
     "OriginatingSystemName",
     "OriginatingSystemSubName"
     "ListOfficeName",
-    "BuyerOfficeName"
+    "BuyerOfficeName",
+    "ListAgentFullName"
 ]
 sold_to_remove = [
-    "ListAgentFullName",
     "ListAgentFirstName",
     "ListAgentLastName",
     "ListAgentEmail",
@@ -388,9 +425,10 @@ list_secondary_variables = [
     "MlsStatus",
     "StateOrProvince",
     "ContractStatusChangeDate",
-    "UnparsedAddress"
-    "ListOfficeName"
-    "BuyerOfficeName"
+    "UnparsedAddress",
+    "ListOfficeName",
+    "BuyerOfficeName",
+    "ListAgentFullName"
 ]
 identifier_variables = [
     "ListingKey",
@@ -399,7 +437,6 @@ identifier_variables = [
     "StreetNumberNumeric"
 ]
 list_to_remove = [
-    "ListAgentFullName",
     "ListAgentFirstName",
     "ListAgentLastName",
     "ListAgentEmail",
