@@ -13,20 +13,6 @@ The project combines MLS listing and sold-property records to study market activ
 3. [Data](#data)
 4. [Repository Structure](#repository-structure)
 5. [Data Pipeline](#data-pipeline)
-6. [Data Cleaning](#data-cleaning)
-7. [Feature Engineering](#feature-engineering)
-8. [Data Validation](#data-validation)
-9. [Exploratory Data Analysis](#exploratory-data-analysis)
-10. [Tableau Dashboard](#tableau-dashboard)
-11. [Key Metrics](#key-metrics)
-12. [Geographic Analysis](#geographic-analysis)
-13. [Agent and Office Analysis](#agent-and-office-analysis)
-14. [Filters and Interactivity](#filters-and-interactivity)
-15. [Technologies](#technologies)
-16. [How to Run the Project](#how-to-run-the-project)
-17. [Known Limitations](#known-limitations)
-18. [Future Improvements](#future-improvements)
-
 ---
 
 # Project Overview
