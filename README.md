@@ -4,6 +4,8 @@ A data analytics project focused on cleaning, validating, analyzing, and visuali
 
 The project combines MLS listing and sold-property records to study market activity, pricing, sales performance, geographic patterns, property characteristics, and agent/office performance. The cleaned datasets are used to build an interactive Tableau dashboard with geographic and market-level filters.
 
+links to tableau : https://public.tableau.com/app/profile/max.zhang1950/viz/market_analysis_17864088352410/ListingSalesActivity and https://public.tableau.com/app/profile/max.zhang1950/viz/Competative_analysis/OfficeEfficiency
+
 ---
 
 ## Table of Contents
